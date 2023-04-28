@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  postgres_bexup:
+    image: postgres
+    volumes: 
+      - ./scripts_fipe.sql:/docker-entrypoint-initdb.d/table_marcas.sql
+    environment:
+      POSTGRES_PASSWORD: "Postgres2022!"
+    ports:
+      - "5432:5432"
