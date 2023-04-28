@@ -47,11 +47,13 @@ app.patch('/api2/veiculos/:codigo', async (req, res) => {
 async function consumer() {
   console.log("Ininicando consumidor");
 
-  const client = await pool.connect();
+  
 
   subscription.on('message', async message => {
-
+    const client = await pool.connect();
     try {
+      
+      await client.query('BEGIN');
       const message_received = JSON.parse(message.data.toString());
       
       const sql_marcas_insert = "INSERT INTO MARCAS (CODIGO,NOME) VALUES($1,$2) ON CONFLICT(CODIGO) where CODIGO = $1 DO UPDATE SET NOME = $2";
@@ -70,10 +72,13 @@ async function consumer() {
 
       });
 
-
+      await client.query('COMMIT');
       // console.log("Iniciando processando dos modelos==> "+ JSON.stringify(response.data));
     } catch (error) {
       console.error(error);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
     }
 
 
