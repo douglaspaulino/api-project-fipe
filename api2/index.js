@@ -4,77 +4,79 @@ const pg = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-const connectionString = process.env.DATABASE_URL || 'postgres://postgres:Postgres2022!@localhost:5432/projeto';
+const connectionString = process.env.DATABASE_URL || 'postgres://postgres:Postgres2022@localhost:5432/projeto_fipe';
 
 // requisições http
 const axios = require('axios');
 
 // pubsub gcp
-const { PubSub } = require('@google-cloud/pubsub')
-
+const { PubSub } = require('@google-cloud/pubsub');
+const pubsub = new PubSub();
+const subscription = pubsub.subscription('subscription_name');
 
 const pool = new pg.Pool({
   connectionString: connectionString,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-pool.connect();
 
 app.use(bodyParser.json());
 
-// endpoint para buscar as marcas no serviço da FIPE
-app.get('/marcas/load', async (req, res) => {
-  try {
-    const response = await axios.get('https://parallelum.com.br/fipe/api/v1/carros/marcas');
-    const marcas = response.data;
-
-    const pubsub = new PubSub();
-
-    for (let index = 0; index < marcas.length; index++) {
-      const element = marcas[index];
-      const jobData = Buffer.from(JSON.stringify(element))
-
-      await pubsub.topic('queue_bex').publish(jobData);
-
-      continue;
-    }
-
-    res.json(marcas);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Something broke!');
-
-  }
-
-});
-
-// endpoint para buscar os códigos, modelos e observações dos veículos por marca no banco de dados
-app.get('/veiculos/:marca', (req, res) => {
-  const marca = req.params.marca;
-  // lógica para buscar os veículos no banco de dados
-  // ...
-  // retorna os veículos em formato JSON
-  res.json(veiculos);
-});
 
 // endpoint para salvar os dados alterados do veículo no banco de dados
-app.put('/veiculos/:id', (req, res) => {
-  const id = req.params.id;
-  const { modelo, observacoes } = req.body;
-  // lógica para atualizar os dados do veículo no banco de dados
-  // ...
-  // retorna uma mensagem indicando sucesso ou falha
-  res.json({ message: 'Dados do veículo atualizados com sucesso!' });
+app.patch('/api2/veiculos/:codigo', async (req, res) => {
+  const client = await pool.connect();
+
+  const codigo = req.params.codigo;
+  const { nome, observacoes } = req.body;
+  const sql_modelos_update = "UPDATE MODELOS SET NOME=$2, OBSERVACOES = $3 WHERE CODIGO = $1";
+
+  const values_modelos_update = [codigo,nome, observacoes];
+  await client.query(sql_modelos_update,values_modelos_update);
+
+  // recuperar registro alterado
+  const sql_modelos_select = "SELECT * FROM MODELOS WHERE CODIGO = $1";
+  const values_modelos_select = [codigo];
+
+  const result = await client.query(sql_modelos_select, values_modelos_select)
+
+  res.json({ data: result.rows[0], count:  result.rowCount });
 });
 
 
-function consumer() {
+async function consumer() {
   console.log("Ininicando consumidor");
-  const pubsub = new PubSub()
-  const subscription = pubsub.subscription('subscription_name')
-  subscription.on('message', message => {
-    const { data } = message
-    console.log(data.toString());
+
+  const client = await pool.connect();
+
+  subscription.on('message', async message => {
+
+    try {
+      const message_received = JSON.parse(message.data.toString());
+      
+      const sql_marcas_insert = "INSERT INTO MARCAS (CODIGO,NOME) VALUES($1,$2) ON CONFLICT(CODIGO) where CODIGO = $1 DO UPDATE SET NOME = $2";
+  
+      const values_marcas_insert = [message_received.codigo, message_received.nome];
+      await client.query(sql_marcas_insert,values_marcas_insert);
+      console.log(": Marca inserida ==>"+message.data.toString());
+
+      const response = await axios.get('https://parallelum.com.br/fipe/api/v1/carros/marcas/'+message_received.codigo+'/modelos');
+      await response.data.modelos.forEach(async modelo => {
+        
+        const sql_modelos_insert = "INSERT INTO MODELOS (CODIGO,NOME,MARCA_CODIGO) VALUES($1,$2,$3) ON CONFLICT(CODIGO) where CODIGO = $1 and MARCA_CODIGO = $3  DO UPDATE SET NOME = $2, MARCA_CODIGO = $3";
+        const values_modelos_insert = [modelo.codigo, modelo.nome, message_received.codigo];
+        await client.query(sql_modelos_insert,values_modelos_insert);
+        console.log("::: Modelo inserido ==>"+values_modelos_insert.toString());
+
+      });
+
+
+      // console.log("Iniciando processando dos modelos==> "+ JSON.stringify(response.data));
+    } catch (error) {
+      console.error(error);
+    }
+
+
 
 
     message.ack() // This deletes the message from the queue

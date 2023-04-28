@@ -1,10 +1,49 @@
 version: '3.8'
+# services:
+#   postgres_bexup:
+#     image: postgres
+#     volumes: 
+#       - ./scripts_fipe.sql:/docker-entrypoint-initdb.d/scripts_fipe.sql
+#     environment:
+#       POSTGRES_USER: "bexup"
+#       POSTGRES_PASSWORD: "Postgres2022!"
+#     ports:
+#       - "5432:5432"
+
 services:
-  postgres_bexup:
+  postgres:
+    container_name: postgres_container
     image: postgres
-    volumes: 
-      - ./scripts_fipe.sql:/docker-entrypoint-initdb.d/table_marcas.sql
     environment:
-      POSTGRES_PASSWORD: "Postgres2022!"
+      POSTGRES_PASSWORD: "Postgres2022"
+    volumes:
+      - ./scripts_fipe.sql:/docker-entrypoint-initdb.d/scripts_fipe.sql
     ports:
       - "5432:5432"
+    networks:
+      - postgres
+    restart: unless-stopped
+  
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+       - pgadmin:/var/lib/pgadmin
+
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+networks:
+  postgres:
+    driver: bridge
+
+volumes:
+    postgres:
+    pgadmin:      
