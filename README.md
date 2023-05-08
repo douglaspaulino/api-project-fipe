@@ -6,7 +6,6 @@ Tempo do teste 40 Minutos.
 1. Backend
 2. FrontEnd
 
-Subir no github e enviar link para o email: rsimonassi@bexup.com
 
 
 
@@ -78,4 +77,13 @@ docker compose rm
             "nome": "Integra GS 1.8",
             "observacoes": "testes"
         }'
+```
+
+## Iniciando Front Vue.js
+
+```javascript
+  cd front
+  npm install
+  npm run format
+  npm run dev
 ```

@@ -77,14 +77,15 @@ async function consumer() {
     } catch (error) {
       console.error(error);
       await client.query('ROLLBACK');
+      
     } finally {
-      client.release();
+      await client.release();
     }
 
 
 
 
-    message.ack() // This deletes the message from the queue
+    await message.ack() // This deletes the message from the queue
   })
 }
 consumer();
